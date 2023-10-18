@@ -1,0 +1,26 @@
+# FILEPATH: /home/kbolat/Python/data_enricher/pyproject.toml
+
+[build-system]
+requires = ["setuptools", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "data_enricher"
+authors = [
+    {name = "Kutay Bolat", email = "k.bolat@tudelft.nl"},
+]
+description = "A Python package for enriching data."
+readme = "README.md"
+requires-python = ">=3.9"
+license = {text = "MIT License"}
+classifiers = [
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Topic :: Scientific/Engineering",
+    "Intended Audience :: Science/Research",
+    "Programming Language :: Python :: 3",
+]
+dependencies = [
+    "pytorch>=2.0.0",
+    "scipy>=1.8.1",
+]\
