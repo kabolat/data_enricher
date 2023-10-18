@@ -9,6 +9,7 @@ name = "data_enricher"
 authors = [
     {name = "Kutay Bolat", email = "k.bolat@tudelft.nl"},
 ]
+version = "0.1.0"
 description = "A Python package for enriching data."
 readme = "README.md"
 requires-python = ">=3.9"
@@ -21,6 +22,9 @@ classifiers = [
     "Programming Language :: Python :: 3",
 ]
 dependencies = [
-    "pytorch>=2.0.0",
+    "torch>=2.0.0",
     "scipy>=1.8.1",
-]\
+]
+
+[project.urls]
+Repository = "https://github.com/kabolat/data_enricher"
