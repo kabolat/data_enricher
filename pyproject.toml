@@ -10,7 +10,7 @@ authors = [
     {name = "Kutay Bolat", email = "k.bolat@tudelft.nl"},
 ]
 version = "0.1.0"
-description = "A Python package for enriching data."
+description = "A Python package for enriching data by probabilistic modelling."
 readme = "README.md"
 requires-python = ">=3.9"
 license = {text = "MIT License"}
