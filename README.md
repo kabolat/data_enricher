@@ -136,6 +136,17 @@ Model comparison tests are used to compare the model statistics with the statist
   - `model_comparison(test='mean')`
 
 
+## Installation
+
+Data Enricher can be installed via `pip`:
+
+```bash
+pip install data-enricher
+```
+
+
+
+
 ## References
 - Anderson, T.W., 1962. On the distribution of the two-sample Cramer-von Mises criterion. The Annals of Mathematical Statistics, pp.1148-1159.
 - AN, K., 1933. Sulla determinazione empirica di una legge didistribuzione. Giorn Dell'inst Ital Degli Att, 4, pp.89-91.
