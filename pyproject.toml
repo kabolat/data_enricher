@@ -7,12 +7,12 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "data_enricher"
 authors = [
-    {name = "Kutay Bolat", email = "k.bolat@tudelft.nl"},
+    {name = "Kutay Bölat", email = "k.bolat@tudelft.nl"},
 ]
-version = "0.1.0"
+version = "0.1.2"
 description = "A Python package for enriching data by probabilistic modelling."
 readme = "README.md"
-requires-python = ">=3.9"
+requires-python = "=3.9, =3.10"
 license = {text = "MIT License"}
 classifiers = [
     "License :: OSI Approved :: MIT License",
