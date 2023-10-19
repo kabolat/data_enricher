@@ -148,4 +148,5 @@ Model comparison tests are used to compare the model statistics with the statist
 
 ## Acknowledgements
 This software is developed under the H2020-MSCA-ITN [Innovative Tools for Cyber-Physical Systems (InnoCyPES)](https://innocypes.eu/) project. The project is funded by the European Union's Horizon 2020 research and innovation programme under the Marie Skłodowska-Curie grant agreement No 956433.
+
 <img src="https://upload.wikimedia.org/wikipedia/commons/b/b7/Flag_of_Europe.svg" alt="drawing" width="150"/> 
