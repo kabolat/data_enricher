@@ -1,12 +1,29 @@
+
 # Data Enricher
 
 Data Enricher is a software tool that aims to enrich data for machine learning applications. The main motivations for data enrichment in this project are:
 
 - **Data Scarcity**: The amount of data available for machine learning applications can be limited.
-- **Data Imbalance**: The data available for machine learning applications can be imbalanced.
 - **Data Missingness**: The data available for machine learning applications can have missing values.
 
 The fundamental methodology of the Data Enricher is to model the data probabilistically and use this model to cope with these problems. The module contains various probabilistic models equipped with sampling and imputation capabilities and performance testing tools for these models.
+
+- [Models](#models)
+  - [KDE-based Models](#kde-based-models)
+    - [Vanilla KDE](#vanilla-kde)
+    - [Adaptive KDE](#adaptive-kde)
+    - [$\pi$-KDE](#pi-kde)
+  - [VAE-based Models](#vae-based-models)
+    - [Vanilla VAE](#vanilla-vae)
+    - [Conditional VAE (CVAE)](#conditional-vae-cvae)
+    - [$\beta$-VAE](#beta-vae)
+    - [Conditional $\beta$-VAE (C-$\beta$-VAE)](#conditional-beta-vae-c-beta-vae)
+- [Testers](#testers)
+  - [Sample Comparison](#sample-comparison)
+  - [Model Comparison](#model-comparison)
+- [Installation](#installation)
+- [References](#references)
+- [Acknowledgements](#acknowledgements)
 
 ## Models
 
@@ -141,9 +158,8 @@ Model comparison tests are used to compare the model statistics with the statist
 Data Enricher can be installed via `pip`:
 
 ```bash
-pip install data-enricher
+pip install data_enricher
 ```
-
 
 
 
