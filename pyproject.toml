@@ -9,10 +9,10 @@ name = "data_enricher"
 authors = [
     {name = "Kutay Bölat", email = "k.bolat@tudelft.nl"},
 ]
-version = "0.1.2"
+version = "0.1.3"
 description = "A Python package for enriching data by probabilistic modelling."
 readme = "README.md"
-requires-python = "=3.9, =3.10"
+requires-python = ">=3.9,<=3.10"
 license = {text = "MIT License"}
 classifiers = [
     "License :: OSI Approved :: MIT License",
