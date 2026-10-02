@@ -28,3 +28,9 @@ jobs:
         run: python -m build
       - if: matrix.python-version == '3.12'
         run: python -m twine check dist/*
+      - if: matrix.python-version == '3.12'
+        name: Test built wheel
+        run: |
+          python -m pip uninstall -y data-enricher
+          python -m pip install --no-deps dist/*.whl
+          python -c "import data_enricher, importlib.metadata as metadata; assert data_enricher.__version__ == metadata.version('data-enricher')"
