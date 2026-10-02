@@ -1,96 +1,147 @@
-import torch
-from ..utils.vae_utils import *
+"""Neural-network building blocks for the experimental VAE."""
 
-ACTIVATION = torch.nn.ELU()
+from __future__ import annotations
+
+import torch
+
+from ..utils.vae_utils import kl_divergence, log_prob, to_sigma
+
 
 class NNBlock(torch.nn.Module):
-    def __init__(self, input_dim, output_dim, num_neurons=50, num_hidden_layers=2, **_):
-        super(NNBlock, self).__init__()
+    def __init__(
+        self,
+        input_dim: int,
+        output_dim: int,
+        num_neurons: int = 50,
+        num_hidden_layers: int = 2,
+        **_,
+    ):
+        super().__init__()
         self.input_dim = input_dim
         self.output_dim = output_dim
         self.num_neurons = num_neurons
         self.num_layers = num_hidden_layers
-
         self.input_layer = torch.nn.Linear(input_dim, num_neurons)
-        self.middle_layers = torch.nn.ModuleList([torch.nn.Linear(num_neurons, num_neurons) for _ in range(num_hidden_layers)]) 
+        self.middle_layers = torch.nn.ModuleList(
+            torch.nn.Linear(num_neurons, num_neurons)
+            for _ in range(num_hidden_layers)
+        )
         self.output_layer = torch.nn.Linear(num_neurons, output_dim)
+        self.activation = torch.nn.ELU()
 
-        # setup the non-linearity
-        self.act = ACTIVATION
-
-    def forward(self, x):
-        h = x.view(-1, self.input_dim)
-        h = self.act(self.input_layer(h))
-        
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        hidden = self.activation(self.input_layer(x.reshape(-1, self.input_dim)))
         for layer in self.middle_layers:
-            h = self.act(layer(h))
+            hidden = self.activation(layer(hidden))
+        return self.output_layer(hidden)
 
-        h = self.output_layer(h)
-        return h
+    def _num_parameters(self) -> int:
+        return sum(parameter.numel() for parameter in self.parameters())
 
-    def _num_parameters(self):
-        return sum(p.numel() for p in self.parameters() if p.requires_grad)
 
 class ParameterizerNN(torch.nn.Module):
-    def __init__(self, input_dim, output_dim, dist_params=["mu"], num_hidden_layers=2, num_neurons=50, **_):
-        super(ParameterizerNN, self).__init__()
+    def __init__(
+        self,
+        input_dim: int,
+        output_dim: int,
+        dist_params: tuple[str, ...] = ("mu",),
+        num_hidden_layers: int = 2,
+        num_neurons: int = 50,
+        **_,
+    ):
+        super().__init__()
         self.dist_params = dist_params
+        # Keep the 0.1.x module names so existing VAE state dictionaries remain loadable.
         self.block_dict = torch.nn.ModuleDict()
+        self.block_dict["input"] = NNBlock(
+            input_dim, num_neurons, num_neurons, num_hidden_layers
+        )
+        for parameter in dist_params:
+            self.block_dict[parameter] = NNBlock(
+                num_neurons, output_dim, num_neurons, 1
+            )
+        self.activation = torch.nn.ELU()
 
-        self.block_dict["input"] = NNBlock(input_dim, num_neurons, num_neurons=num_neurons, num_hidden_layers=num_hidden_layers)
+    def forward(self, inputs: torch.Tensor) -> dict[str, torch.Tensor]:
+        hidden = self.activation(self.block_dict["input"](inputs))
+        return {
+            parameter: self.block_dict[parameter](hidden)
+            for parameter in self.dist_params
+        }
 
-        for param in dist_params:
-            self.block_dict[param] = NNBlock(num_neurons, output_dim, num_neurons=num_neurons, num_hidden_layers=1)
-        # setup the non-linearity
-        self.act = ACTIVATION
+    def _num_parameters(self) -> int:
+        return sum(parameter.numel() for parameter in self.parameters())
 
-    def forward(self, inputs):
-        h = inputs.view(-1, self.block_dict["input"].input_dim)
-        h = self.act(self.block_dict["input"](h))
-        output_dict = {}
-        for param in self.dist_params:
-            output_dict[param] = self.block_dict[param](h)
-        return output_dict
-    
-    def _num_parameters(self):
-        return sum(p.numel() for p in self.parameters() if p.requires_grad)
 
 class GaussianNN(torch.nn.Module):
-    def __init__(self, input_dim, output_dim, learn_sigma=True, num_hidden_layers=2, num_neurons=50, **_):
-        super(GaussianNN, self).__init__()
-
+    def __init__(
+        self,
+        input_dim: int,
+        output_dim: int,
+        learn_sigma: bool = True,
+        num_hidden_layers: int = 2,
+        num_neurons: int = 50,
+        **_,
+    ):
+        super().__init__()
         self.learn_sigma = learn_sigma
+        dist_params = ("mu", "sigma") if learn_sigma else ("mu",)
+        self.parameterizer = ParameterizerNN(
+            input_dim,
+            output_dim,
+            dist_params=dist_params,
+            num_hidden_layers=num_hidden_layers,
+            num_neurons=num_neurons,
+        )
 
-        if learn_sigma: dist_params = ["mu", "sigma"]
-        else: dist_params = ["mu"]
-
-        self.parameterizer = ParameterizerNN(input_dim, output_dim, dist_params=dist_params, num_hidden_layers=num_hidden_layers, num_neurons=num_neurons)
-
-    def _num_parameters(self):
+    def _num_parameters(self) -> int:
         return self.parameterizer._num_parameters()
-    
-    def forward(self, inputs):
-        param_dict = self.parameterizer(inputs)
-        if self.learn_sigma: param_dict["sigma"] = to_sigma(param_dict["sigma"])
-        else: param_dict["sigma"] = torch.ones_like(param_dict["mu"])
-        return param_dict
-    
-    def rsample(self, param_dict=None, num_samples=1, **_):
-        return param_dict["mu"] + param_dict["sigma"] * torch.randn((num_samples, *param_dict["mu"].shape))
 
-    def sample(self, param_dict=None, num_samples=1, **_):
-        return self.rsample(param_dict=param_dict, num_samples=num_samples)
-    
-    def log_likelihood(self, targets, param_dict=None):
+    def forward(self, inputs: torch.Tensor) -> dict[str, torch.Tensor]:
+        params = self.parameterizer(inputs)
+        params["sigma"] = (
+            to_sigma(params["sigma"])
+            if self.learn_sigma
+            else torch.ones_like(params["mu"])
+        )
+        return params
+
+    def rsample(
+        self,
+        param_dict: dict[str, torch.Tensor],
+        num_samples: int = 1,
+        *,
+        generator: torch.Generator | None = None,
+        **_,
+    ) -> torch.Tensor:
+        noise = torch.randn(
+            (num_samples, *param_dict["mu"].shape),
+            device=param_dict["mu"].device,
+            dtype=param_dict["mu"].dtype,
+            generator=generator,
+        )
+        return param_dict["mu"] + param_dict["sigma"] * noise
+
+    def sample(self, *args, **kwargs) -> torch.Tensor:
+        return self.rsample(*args, **kwargs)
+
+    def log_likelihood(
+        self, targets: torch.Tensor, param_dict: dict[str, torch.Tensor]
+    ) -> torch.Tensor:
         return log_prob("Normal", param_dict, targets)
-    
-    def kl_divergence(self, param_dict=None, prior_params={"mu":0.0, "sigma":1.0}):
+
+    def kl_divergence(
+        self,
+        param_dict: dict[str, torch.Tensor],
+        prior_params: dict[str, torch.Tensor],
+    ) -> torch.Tensor:
         return kl_divergence("Normal", param_dict, prior_params)
 
-def get_distribution_model(dist_type, **kwargs):
-    if dist_type.lower() in ["gaussian", "gauss", "normal", "n", "g"]: return GaussianNN(**kwargs)
-    else: raise NotImplementedError("Unknown distribution type: {}".format(dist_type))
 
-def get_prior_params(dist_type, num_dims=1):
-    if dist_type.lower() in ["gaussian", "gauss", "normal", "n", "g"]: return {"mu":torch.zeros(num_dims), "sigma":torch.ones(num_dims)}
-    else: raise NotImplementedError("Unknown distribution type: {}".format(dist_type))
+def get_distribution_model(dist_type: str, **kwargs) -> GaussianNN:
+    if dist_type.lower() in {"gaussian", "gauss", "normal", "n", "g"}:
+        return GaussianNN(**kwargs)
+    raise NotImplementedError(f"unknown distribution type: {dist_type}")
+
+
+__all__ = ["GaussianNN", "NNBlock", "ParameterizerNN", "get_distribution_model"]
