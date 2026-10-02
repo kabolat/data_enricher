@@ -1,0 +1,28 @@
+cff-version: 1.2.0
+message: >-
+  If you use the KDE method in this software, please cite the journal article below.
+title: Data Enricher
+type: software
+version: 0.2.0
+authors:
+  - family-names: Bölat
+    given-names: Kutay
+    email: k.bolat@tudelft.nl
+repository-code: https://github.com/kabolat/data_enricher
+url: https://pypi.org/project/data-enricher/
+license: MIT
+preferred-citation:
+  type: article
+  title: Stable training of probabilistic models using the leave-one-out maximum log-likelihood objective
+  authors:
+    - family-names: Bölat
+      given-names: Kutay
+    - family-names: Tindemans
+      given-names: Simon H.
+    - family-names: Palensky
+      given-names: Peter
+  journal: Electric Power Systems Research
+  volume: 235
+  year: 2024
+  start: "110775"
+  doi: 10.1016/j.epsr.2024.110775
