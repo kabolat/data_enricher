@@ -1,74 +1,151 @@
+"""Statistical comparisons used to evaluate generated samples."""
+
+from __future__ import annotations
+
+from collections.abc import Sequence
+
 import torch
-from scipy.stats import ks_2samp as KS
-from scipy.stats import cramervonmises_2samp as CVM
+from scipy.stats import cramervonmises_2samp, ks_2samp
 
-def MMDTest(base_samples, test_samples, alphas=[0.5, 1.0, 2.0, 5.0, 10.0]):
-    
-    n_base, n_test = base_samples.size(0), test_samples.size(0)
-    
-    a00 = 1.0/(n_base*(n_base - 1))
-    a11 = 1.0/(n_test*(n_test - 1))
-    a01 = -1.0/(n_base*n_test)
 
-    sample_12 = torch.cat((base_samples, test_samples), 0)
-    distances = torch.norm((sample_12.unsqueeze(1)-sample_12),dim=-1)
+def _validate_samples(*samples: torch.Tensor) -> None:
+    for sample in samples:
+        if not isinstance(sample, torch.Tensor) or sample.ndim != 2:
+            raise ValueError("samples must be two-dimensional torch tensors")
+        if sample.shape[0] < 2:
+            raise ValueError("each sample set must contain at least two rows")
+        if not sample.is_floating_point():
+            raise ValueError("samples must use a floating-point dtype")
+        if not torch.isfinite(sample).all():
+            raise ValueError("samples must contain only finite values")
 
-    kernels = None
-    for alpha in alphas:
-        kernels_a = torch.exp(-alpha*distances**2)
-        if kernels is None: kernels = kernels_a
-        else: kernels = kernels + kernels_a
+    reference = samples[0]
+    for sample in samples[1:]:
+        if sample.shape[1] != reference.shape[1]:
+            raise ValueError("sample sets must have the same number of features")
+        if sample.device != reference.device or sample.dtype != reference.dtype:
+            raise ValueError("sample sets must have the same device and dtype")
 
-    k_1 = kernels[:n_base, :n_base]
-    k_2 = kernels[n_base:, n_base:]
-    k_12 = kernels[:n_base, n_base:]
 
-    score = (2*a01*k_12.sum() + 
-            a00*(k_1.sum()-torch.trace(k_1)) + 
-            a11*(k_2.sum()-torch.trace(k_2)))
-    
-    return score
+def mmd_test(
+    base_samples: torch.Tensor,
+    test_samples: torch.Tensor,
+    alphas: Sequence[float] = (0.5, 1.0, 2.0, 5.0, 10.0),
+) -> torch.Tensor:
+    """Return the unbiased squared maximum mean discrepancy statistic."""
+    _validate_samples(base_samples, test_samples)
+    if not alphas or any(alpha <= 0 for alpha in alphas):
+        raise ValueError("alphas must contain positive values")
 
-def EnergyTest(base_samples, test_samples):
+    n_base, n_test = base_samples.shape[0], test_samples.shape[0]
+    samples = torch.cat((base_samples, test_samples))
+    squared_distances = torch.cdist(samples, samples).square()
+    kernels = sum(torch.exp(-alpha * squared_distances) for alpha in alphas)
 
-    n_base, n_test = base_samples.size(0), test_samples.size(0)
+    base_kernel = kernels[:n_base, :n_base]
+    test_kernel = kernels[n_base:, n_base:]
+    cross_kernel = kernels[:n_base, n_base:]
+    return (
+        (base_kernel.sum() - base_kernel.diagonal().sum()) / (n_base * (n_base - 1))
+        + (test_kernel.sum() - test_kernel.diagonal().sum())
+        / (n_test * (n_test - 1))
+        - 2 * cross_kernel.mean()
+    )
 
-    a00 = -1.0/(n_base**2)
-    a11 = -1.0/(n_test*2)
-    a01 = 1.0/(n_base*n_test)
 
-    sample_12 = torch.cat((base_samples, test_samples), 0)
-    distances = torch.norm((sample_12.unsqueeze(1)-sample_12),dim=-1)
+def energy_test(
+    base_samples: torch.Tensor, test_samples: torch.Tensor
+) -> torch.Tensor:
+    """Return the multivariate energy-distance statistic."""
+    _validate_samples(base_samples, test_samples)
 
-    d_1 = distances[:n_base, :n_base].sum()
-    d_2 = distances[-n_test:, -n_test:].sum()
-    d_12 = distances[:n_base, -n_test:].sum()
+    n_base = base_samples.shape[0]
+    samples = torch.cat((base_samples, test_samples))
+    distances = torch.cdist(samples, samples)
+    base_distances = distances[:n_base, :n_base]
+    test_distances = distances[n_base:, n_base:]
+    cross_distances = distances[:n_base, n_base:]
+    return 2 * cross_distances.mean() - base_distances.mean() - test_distances.mean()
 
-    score = 2*a01*d_12 + a00*d_1 + a11*d_2
 
-    return score
+def sample_comparison(
+    model_samples: torch.Tensor,
+    train_samples: torch.Tensor,
+    test_samples: torch.Tensor,
+    test: str = "mmd",
+    subsample_ratio: float = 0.4,
+    mc_runs: int = 1000,
+    *,
+    generator: torch.Generator | None = None,
+) -> tuple[torch.Tensor, torch.Tensor]:
+    """Compare random subsets of generated and training data with test data."""
+    _validate_samples(model_samples, train_samples, test_samples)
+    if not 0 < subsample_ratio <= 1:
+        raise ValueError("subsample_ratio must be in (0, 1]")
+    if mc_runs < 1:
+        raise ValueError("mc_runs must be positive")
 
-def sample_comparison(model_samples, train_samples, test_samples, test="mmd", subsample_ratio=0.4, mc_runs=1000):
-    assert model_samples.shape[0]==train_samples.shape[0]
+    test_functions = {"mmd": mmd_test, "energy": energy_test}
+    try:
+        test_function = test_functions[test.lower()]
+    except KeyError as error:
+        raise ValueError(f"unknown sample comparison test: {test}") from error
 
-    if test=="mmd": test_func = MMDTest
-    elif test=="energy": test_func = EnergyTest
-    else: raise NotImplementedError("Test not implemented.")
+    subsample_size = max(2, int(test_samples.shape[0] * subsample_ratio))
+    if any(sample.shape[0] < subsample_size for sample in (model_samples, train_samples)):
+        raise ValueError("model and training samples must cover the subsample size")
 
-    num_samples = test_samples.shape[0]
-    n = int(num_samples*subsample_ratio)
-
-    base_scores, model_scores = torch.zeros(mc_runs), torch.zeros(mc_runs)
-
-    for i in range(mc_runs):
-        test_subsamples = test_samples[torch.randperm(num_samples)[:n]]
-        base_scores[i] = test_func(test_subsamples,train_samples[torch.randperm(train_samples.shape[0])[:n]])
-        model_scores[i] = test_func(test_subsamples,model_samples[torch.randperm(model_samples.shape[0])[:n]])
+    base_scores = test_samples.new_empty(mc_runs)
+    model_scores = test_samples.new_empty(mc_runs)
+    for index in range(mc_runs):
+        test_subset = test_samples[
+            torch.randperm(test_samples.shape[0], device=test_samples.device, generator=generator)[
+                :subsample_size
+            ]
+        ]
+        train_subset = train_samples[
+            torch.randperm(
+                train_samples.shape[0], device=train_samples.device, generator=generator
+            )[:subsample_size]
+        ]
+        model_subset = model_samples[
+            torch.randperm(
+                model_samples.shape[0], device=model_samples.device, generator=generator
+            )[:subsample_size]
+        ]
+        base_scores[index] = test_function(test_subset, train_subset)
+        model_scores[index] = test_function(test_subset, model_subset)
     return model_scores, base_scores
 
-def model_comparison(model_scores, base_scores, test="ks"):
-    if test=="ks": test_func = lambda x,y: KS(x,y).statistic
-    elif test=="cvm": test_func = lambda x,y: CVM(x,y).statistic
-    elif test=="mean": test_func = lambda x,y: y.mean()-x.mean()
-    else: raise NotImplementedError("Test not implemented.")
-    return test_func(base_scores, model_scores)
+
+def model_comparison(
+    model_scores: torch.Tensor, base_scores: torch.Tensor, test: str = "ks"
+) -> float:
+    """Compare the distributions of model and baseline test statistics."""
+    if model_scores.ndim != 1 or base_scores.ndim != 1:
+        raise ValueError("model_scores and base_scores must be one-dimensional")
+    model = model_scores.detach().cpu().numpy()
+    base = base_scores.detach().cpu().numpy()
+
+    test = test.lower()
+    if test == "ks":
+        return float(ks_2samp(base, model).statistic)
+    if test == "cvm":
+        return float(cramervonmises_2samp(base, model).statistic)
+    if test == "mean":
+        return float(model.mean() - base.mean())
+    raise ValueError(f"unknown model comparison test: {test}")
+
+
+# Backward-compatible 0.1.x names. Remove in 1.0.
+MMDTest = mmd_test
+EnergyTest = energy_test
+
+__all__ = [
+    "EnergyTest",
+    "MMDTest",
+    "energy_test",
+    "mmd_test",
+    "model_comparison",
+    "sample_comparison",
+]
