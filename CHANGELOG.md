@@ -1,5 +1,15 @@
 # Changelog
 
+## Unreleased
+
+### Added
+
+- Test the built wheel in CI and show project-status badges in the README.
+
+### Changed
+
+- Restrict automated PyPI publishing to releases whose tags start with `v`.
+
 ## 0.2.0 - 2026-10-02
 
 ### Fixed

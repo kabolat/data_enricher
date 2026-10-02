@@ -1,5 +1,10 @@
 # Data Enricher
 
+[![CI](https://github.com/kabolat/data_enricher/actions/workflows/ci.yml/badge.svg)](https://github.com/kabolat/data_enricher/actions/workflows/ci.yml)
+[![PyPI](https://img.shields.io/pypi/v/data-enricher.svg)](https://pypi.org/project/data-enricher/)
+[![Python](https://img.shields.io/pypi/pyversions/data-enricher.svg)](https://pypi.org/project/data-enricher/)
+[![Paper DOI](https://img.shields.io/badge/DOI-10.1016%2Fj.epsr.2024.110775-blue.svg)](https://doi.org/10.1016/j.epsr.2024.110775)
+
 Data Enricher is a small PyTorch package for probabilistic modelling of tabular
 data. It provides isotropic Gaussian kernel-density estimators (KDEs) for data
 generation and missing-value imputation, together with statistical comparison
